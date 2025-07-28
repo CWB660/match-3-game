@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>羊了个羊 - 简单版本</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: white;
+            cursor: pointer;
+        }
+        .info {
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        .selected-cards {
+            margin: 10px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .card-slot {
+            width: 50px;
+            height: 50px;
+            border: 2px dashed #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            background: #f9f9f9;
+        }
+        .card-slot.filled {
+            border: 2px solid #4CAF50;
+            background: #e8f5e8;
+        }
+        .slot-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        .slots {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px 0;
+            min-height: 60px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .slot-card {
+            width: 65px;
+            height: 65px;
+            border: 2px solid #81C784;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            background: #81C784;
+            color: white;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .slot-card.removing {
+            animation: slotRemove 0.5s ease-out;
+        }
+        @keyframes slotRemove {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); background: #A5D6A7; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        .slot-card.adding {
+            animation: slotAdd 0.5s ease-out;
+        }
+        @keyframes slotAdd {
+            0% { transform: scale(0) translateY(-50px); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .slot-card.warning {
+            border-color: #FF5722;
+            background: #FFCDD2;
+            color: #B71C1C;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        .controls button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+        #restartBtn {
+            background: #FF5722;
+            color: white;
+        }
+        #restartBtn:hover {
+            background: #E64A19;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #saveBtn {
+            background: #4CAF50;
+            color: white;
+        }
+        #saveBtn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #nextLevelBtn {
+            background: #2196F3;
+            color: white;
+        }
+        #nextLevelBtn:hover {
+            background: #1976D2;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #debugBtn {
+            background: #9C27B0;
+            color: white;
+        }
+        #debugBtn:hover {
+            background: #7B1FA2;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .level-info {
+            margin: 15px 0;
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .level-info .info {
+            background: #E3F2FD;
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 2px solid #2196F3;
+            color: #1976D2;
+        }
+        .emoji-count {
+            margin: 10px 0;
+            padding: 10px;
+            background: #F5F5F5;
+            border-radius: 8px;
+            font-size: 14px;
+            max-height: 60px;
+            overflow-y: auto;
+        }
+        .emoji-count-item {
+            display: inline-block;
+            margin: 2px 5px;
+            padding: 2px 6px;
+            background: #E8F5E8;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        .emoji-count-item.warning {
+            background: #FFF3E0;
+            color: #E65100;
+        }
+        .emoji-count-item.danger {
+            background: #FFEBEE;
+            color: #C62828;
+        }
+    </style>
+</head>
+<body>
+    <h1>羊了个羊</h1>
+    <div class="info">点击卡牌即可消除，只有未被遮挡的卡牌可以点击</div>
+    <canvas id="gameCanvas" width="1200" height="800"></canvas>
+    
+    <!-- 8槽位列表 -->
+    <div class="slot-container">
+        <div class="info">槽位列表 (最多8张)</div>
+        <div class="slots" id="slotContainer">
+            <!-- 槽位将通过JavaScript动态生成 -->
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="restartBtn" onclick="game.restart()">重新开始</button>
+        <button id="saveBtn" onclick="game.saveGame()">保存进度</button>
+        <button id="nextLevelBtn" onclick="game.nextLevel()" style="display: none;">下一关</button>
+        <button id="debugBtn" onclick="game.debugGameState()">调试检测</button>
+    </div>
+    
+    <div class="level-info">
+        <div class="info">第 <span id="currentLevel">1</span> 关</div>
+        <div class="info">难度：<span id="difficulty">简单</span></div>
+    </div>
+    
+    <div class="emoji-count" id="emojiCount">
+        <!-- 卡牌数量统计将在这里显示 -->
+    </div>
+    
+    <div class="info" id="gameStatus">点击卡牌开始游戏</div>
+
+    <script>
+        class Card {
+            constructor(x, y, layer, emoji) {
+                this.x = x;
+                this.y = y;
+                this.width = 65;
+                this.height = 65;
+                this.layer = layer;
+                this.emoji = emoji;
+                this.visible = true;
+                this.selected = false;
+                this.isClickable = true;
+                this.isBlocked = false;
+            }
+
+            draw(ctx) {
+                if (!this.visible) return;
+
+                ctx.save();
+                
+                // 卡牌阴影
+                ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+
+                // 卡牌背景：统一浅黄色，只有被遮挡的才变暗
+                if (this.selected) {
+                    ctx.fillStyle = '#E8F5E8'; // 选中状态：淡绿色
+                } else if (this.isBlocked) {
+                    ctx.fillStyle = '#A5D6A7'; // 被遮挡状态：淡绿色
+                } else {
+                    ctx.fillStyle = '#F8FFD1'; // 正常状态：浅黄色
+                }
+                
+                // 绘制圆角矩形
+                const cardRadius = 8;
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, cardRadius);
+                ctx.fill();
+                
+                // 卡牌边框：统一暗绿色边框
+                if (this.selected) {
+                    ctx.strokeStyle = '#1B5E20'; // 选中状态：很暗的深绿色边框
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = 'rgba(27, 94, 32, 0.5)';
+                    ctx.shadowBlur = 6;
+                } else if (this.isBlocked) {
+                    ctx.strokeStyle = '#2E7D32'; // 被遮挡状态：暗绿色边框
+                    ctx.lineWidth = 2;
+                    ctx.shadowColor = 'rgba(46, 125, 50, 0.2)';
+                    ctx.shadowBlur = 2;
+                } else {
+                    // 正常状态：深绿色边框
+                    ctx.strokeStyle = '#1B5E20';
+                    ctx.lineWidth = 2;
+                    ctx.shadowColor = 'rgba(27, 94, 32, 0.3)';
+                    ctx.shadowBlur = 3;
+                }
+                
+                // 绘制圆角边框
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, cardRadius);
+                ctx.stroke();
+                
+                // 重置阴影效果，避免影响后续绘制
+                ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+
+                // 绘制emoji：只有被遮挡的才变暗
+                ctx.font = '32px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                if (this.isBlocked) {
+                    ctx.fillStyle = '#424242'; // 被遮挡状态：很暗的灰色
+                } else {
+                    ctx.fillStyle = '#FFFFFF'; // 正常状态：纯白色
+                }
+                ctx.fillText(this.emoji, this.x + this.width/2, this.y + this.height/2);
+
+                // 层级标识（调试用）
+                ctx.font = '10px Arial';
+                ctx.fillStyle = '#666';
+                ctx.fillText(this.layer.toString(), this.x + 5, this.y + 10);
+
+                // 为被遮挡的卡牌添加半透明覆盖层，增强暗淡效果
+                if (this.isBlocked) {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                    ctx.beginPath();
+                    ctx.roundRect(this.x, this.y, this.width, this.height, cardRadius);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+
+  
+            isPointInside(x, y) {
+                return x >= this.x && x <= this.x + this.width &&
+                       y >= this.y && y <= this.y + this.height;
+            }
+        }
+
+        class Game {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.cards = [];
+                this.slots = []; // 槽位中的卡牌
+                this.maxSlots = 8; // 最多8个槽位
+                this.currentLevel = 1;
+                this.maxLevel = 10;
+                this.emojis = ['🐑', '🌟', '🎈', '🌺', '🍎', '🚀', '🌈', '🎯', '🦋', '🌸', '🍊', '🦄', '🐱', '🐶', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐸'];
+                
+                // 关卡配置
+                this.levelConfigs = [
+                    { level: 1, name: '简单', emojiTypes: 8, repetitionRate: 0.15, cardMultiplier: 0.8, shuffleRate: 0.2 },
+                    { level: 2, name: '简单', emojiTypes: 9, repetitionRate: 0.18, cardMultiplier: 0.85, shuffleRate: 0.3 },
+                    { level: 3, name: '普通', emojiTypes: 10, repetitionRate: 0.22, cardMultiplier: 0.9, shuffleRate: 0.4 },
+                    { level: 4, name: '普通', emojiTypes: 11, repetitionRate: 0.25, cardMultiplier: 0.95, shuffleRate: 0.5 },
+                    { level: 5, name: '普通', emojiTypes: 12, repetitionRate: 0.28, cardMultiplier: 1.0, shuffleRate: 0.6 },
+                    { level: 6, name: '困难', emojiTypes: 13, repetitionRate: 0.32, cardMultiplier: 1.05, shuffleRate: 0.7 },
+                    { level: 7, name: '困难', emojiTypes: 14, repetitionRate: 0.35, cardMultiplier: 1.1, shuffleRate: 0.8 },
+                    { level: 8, name: '困难', emojiTypes: 15, repetitionRate: 0.38, cardMultiplier: 1.15, shuffleRate: 0.85 },
+                    { level: 9, name: '专家', emojiTypes: 16, repetitionRate: 0.42, cardMultiplier: 1.2, shuffleRate: 0.9 },
+                    { level: 10, name: '专家', emojiTypes: 18, repetitionRate: 0.45, cardMultiplier: 1.25, shuffleRate: 0.95 }
+                ];
+                this.init();
+                this.bindEvents();
+                this.initSlots();
+            }
+
+            init() {
+                this.updateLevelDisplay();
+                this.createCards();
+                this.updateClickableStatus();
+                this.updateEmojiCountDisplay();
+                this.draw();
+            }
+
+            initSlots() {
+                const slotContainer = document.getElementById('slotContainer');
+                slotContainer.innerHTML = '';
+                for (let i = 0; i < this.maxSlots; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot-card';
+                    slot.id = `slot-${i}`;
+                    slotContainer.appendChild(slot);
+                }
+            }
+
+            createCards() {
+                // 获取当前关卡配置
+                const levelConfig = this.levelConfigs[this.currentLevel - 1];
+                
+                // 每层使用随机数量的卡牌，基于关卡配置调整
+                let layerSizes = [];
+                const baseMinCards = 20; // 基础每层最少卡牌数
+                const baseMaxCards = 40; // 基础每层最多卡牌数
+                
+                for (let i = 0; i < 7; i++) {
+                    // 生成每层的随机卡牌数量，中间层次多一些
+                    let rangeMin, rangeMax;
+                    if (i === 3) {
+                        // 中间层（第3层）卡牌最多
+                        rangeMin = 35;
+                        rangeMax = 45;
+                    } else if (i === 2 || i === 4) {
+                        // 次中间层
+                        rangeMin = 30;
+                        rangeMax = 40;
+                    } else if (i === 1 || i === 5) {
+                        // 边缘层
+                        rangeMin = 25;
+                        rangeMax = 35;
+                    } else {
+                        // 最外层
+                        rangeMin = baseMinCards;
+                        rangeMax = 30;
+                    }
+                    
+                    // 根据关卡调整卡牌数量
+                    rangeMin = Math.floor(rangeMin * levelConfig.cardMultiplier);
+                    rangeMax = Math.floor(rangeMax * levelConfig.cardMultiplier);
+                    
+                    const randomCount = Math.floor(Math.random() * (rangeMax - rangeMin + 1)) + rangeMin;
+                    layerSizes.push(randomCount);
+                }
+                
+                let totalCards = layerSizes.reduce((sum, size) => sum + size, 0);
+                
+                // 确保总卡牌数是3的倍数，避免后续生成问题
+                totalCards = Math.floor(totalCards / 3) * 3;
+                
+                // 根据关卡选择emoji种类
+                const availableEmojis = this.emojis.slice(0, levelConfig.emojiTypes);
+                
+                // 生成确保可消除的卡牌数组
+                let cardEmojis = this.generateSolvableCards(totalCards, availableEmojis, levelConfig);
+                
+                // 动态修复：检测并补充不满足3倍数的emoji
+                cardEmojis = this.fixEmojiCounts(cardEmojis, availableEmojis);
+                
+                // 更新总卡牌数（可能调整为3的倍数）
+                totalCards = cardEmojis.length;
+                
+                // 调整layerSizes以匹配cardEmojis的长度
+                const originalTotal = layerSizes.reduce((sum, size) => sum + size, 0);
+                if (originalTotal !== totalCards) {
+                    console.log(`调整layerSizes: ${originalTotal} -> ${totalCards}`);
+                    
+                    // 使用更精确的分配方法，确保不丢失任何卡牌
+                    const newLayerSizes = [];
+                    let remainingCards = totalCards;
+                    
+                    // 按比例分配，确保总和等于totalCards
+                    for (let i = 0; i < layerSizes.length - 1; i++) {
+                        // 计算当前层应该分配的卡牌数（按原比例）
+                        const proportion = layerSizes[i] / originalTotal;
+                        const allocatedCards = Math.floor(totalCards * proportion);
+                        newLayerSizes.push(allocatedCards);
+                        remainingCards -= allocatedCards;
+                    }
+                    
+                    // 最后一层分配所有剩余的卡牌，确保不丢失
+                    newLayerSizes.push(remainingCards);
+                    
+                    layerSizes = newLayerSizes;
+                    console.log('调整后的layerSizes:', layerSizes);
+                    console.log('验证总和:', layerSizes.reduce((sum, size) => sum + size, 0));
+                    
+                    // 最终验证：确保总和完全匹配
+                    const finalTotal = layerSizes.reduce((sum, size) => sum + size, 0);
+                    if (finalTotal !== totalCards) {
+                        console.error(`严重错误：layerSizes总和(${finalTotal})仍不等于totalCards(${totalCards})`);
+                        // 强制修正：将差值加到最后一层
+                        const diff = totalCards - finalTotal;
+                        layerSizes[layerSizes.length - 1] += diff;
+                        console.log(`强制修正：给最后一层添加${diff}张卡牌`);
+                        console.log('最终layerSizes:', layerSizes);
+                    }
+                }
+                
+                let emojiIndex = 0;
+                
+                // 从顶层开始生成（第6层到第0层）
+                for (let layerIndex = layerSizes.length - 1; layerIndex >= 0; layerIndex--) {
+                    const size = layerSizes[layerIndex];
+                    console.log(`生成第${layerIndex}层，需要${size}张卡牌`);
+                    
+                    const positions = this.generateCompactPositions(size, layerIndex, layerSizes.length);
+                    console.log(`第${layerIndex}层生成了${positions.length}个位置`);
+                    
+                    if (positions.length !== size) {
+                        console.error(`警告：第${layerIndex}层位置数(${positions.length})与需求(${size})不匹配`);
+                    }
+                    
+                    positions.forEach(pos => {
+                        if (emojiIndex < cardEmojis.length) {
+                            const emoji = cardEmojis[emojiIndex++];
+                            this.cards.push(new Card(pos.x, pos.y, layerIndex, emoji));
+                        } else {
+                            console.error(`严重错误：emojiIndex(${emojiIndex})超出cardEmojis长度(${cardEmojis.length})`);
+                        }
+                    });
+                }
+                
+                // 验证所有卡牌都被分配
+                console.log(`生成的卡牌总数: ${this.cards.length}`);
+                console.log(`预期卡牌总数: ${totalCards}`);
+                console.log(`使用的emoji数量: ${emojiIndex}`);
+                console.log(`可用emoji数量: ${cardEmojis.length}`);
+                
+                if (this.cards.length !== totalCards) {
+                    console.error(`严重错误：实际生成的卡牌数(${this.cards.length})不等于预期数量(${totalCards})`);
+                }
+                
+                if (emojiIndex !== cardEmojis.length) {
+                    console.error(`严重错误：使用的emoji数量(${emojiIndex})不等于可用数量(${cardEmojis.length})`);
+                }
+                
+                // 保持层级排序（先绘制低层级）
+                this.cards.sort((a, b) => a.layer - b.layer);
+            }
+            
+            generateCompactPositions(cardCount, layer, totalLayers) {
+                const positions = [];
+                const cardWidth = 65;
+                const cardHeight = 65;
+                const cardSpacing = 1; // 最小间距，更紧凑
+                
+                // 计算canvas中心点
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                
+                // 根据层级计算Y坐标
+                const layerSpacing = 55; // 减少层级间距，更紧凑
+                const yOffset = -160; // 向上偏移，调整整体位置（增加向上偏移）
+                const yBase = centerY - (totalLayers - 1) * layerSpacing / 2 + layer * layerSpacing + yOffset;
+                
+                // 计算每行最多能放多少张卡牌（紧凑居中排列）
+                const cardsPerRow = Math.min(cardCount, 11); // 增加每行卡牌数
+                const rows = Math.ceil(cardCount / cardsPerRow);
+                
+                // 适度横向层级错开效果
+                const horizontalOffset = cardWidth * (layer % 2 === 0 ? 0.8 : -0.8); // 偶数层右移，奇数层左移，错开0.8个卡牌宽度
+                
+                // 稍微增加竖向层级错开效果
+                const verticalOffset = cardHeight * (layer % 3 === 0 ? 1.0 : layer % 3 === 1 ? -0.5 : 0.5); // 3层一个循环：第0层下移，第1层上移，第2层下移
+                
+                // 根据层级调整每行的居中位置
+                const layerWidthRatio = this.getLayerWidthRatio(layer, totalLayers);
+                const adjustedCardsPerRow = Math.max(1, Math.floor(cardsPerRow * layerWidthRatio));
+                
+                let totalCardsPlaced = 0;
+                for (let row = 0; row < rows; row++) {
+                    const cardsInThisRow = Math.min(adjustedCardsPerRow, cardCount - totalCardsPlaced);
+                    if (cardsInThisRow <= 0) break;
+                    
+                    const rowWidth = cardsInThisRow * (cardWidth + cardSpacing) - cardSpacing;
+                    
+                    // 计算该行的起始X坐标（居中 + 横向层级错开 + 宽度比例调整）
+                    const rowStartX = centerX - rowWidth / 2 + horizontalOffset;
+                    
+                    for (let col = 0; col < cardsInThisRow; col++) {
+                        // 紧凑排列，最小间距 + 竖向层级错开
+                        const x = rowStartX + col * (cardWidth + cardSpacing);
+                        const y = yBase + row * (cardHeight + cardSpacing) + verticalOffset;
+                        
+                        positions.push({x, y});
+                        totalCardsPlaced++;
+                    }
+                }
+                
+                // 确保生成了足够的位置
+                if (positions.length !== cardCount) {
+                    console.warn(`第${layer}层：需要${cardCount}个位置，实际生成${positions.length}个位置`);
+                    
+                    // 如果位置不够，重新计算更合理的布局
+                    const remaining = cardCount - positions.length;
+                    console.log(`第${layer}层：需要补充${remaining}个位置`);
+                    
+                    // 重新计算行数和每行卡牌数，确保布局更紧凑
+                    const newCardsPerRow = Math.min(cardCount, Math.ceil(Math.sqrt(cardCount * 1.5))); // 适中的每行卡牌数
+                    const newRows = Math.ceil(cardCount / newCardsPerRow);
+                    
+                    // 清空原有位置，重新生成更合理的布局
+                    positions.length = 0;
+                    
+                    for (let row = 0; row < newRows; row++) {
+                        const cardsInThisRow = Math.min(newCardsPerRow, cardCount - row * newCardsPerRow);
+                        const rowWidth = cardsInThisRow * (cardWidth + cardSpacing) - cardSpacing;
+                        const rowStartX = centerX - rowWidth / 2 + horizontalOffset;
+                        
+                        for (let col = 0; col < cardsInThisRow; col++) {
+                            const x = rowStartX + col * (cardWidth + cardSpacing);
+                            const y = yBase + row * (cardHeight + cardSpacing) + verticalOffset;
+                            positions.push({x, y});
+                        }
+                    }
+                    
+                    console.log(`第${layer}层：重新布局后共${positions.length}个位置，${newRows}行，每行最多${newCardsPerRow}张`);
+                }
+                
+                return positions;
+            }
+            
+            getLayerWidthRatio(layer, totalLayers) {
+                // 双漏斗结构的宽度比例 (7层)
+                const ratios = [0.4, 0.6, 0.8, 1.0, 0.8, 0.6, 0.4]; // 从底层到顶层的宽度比例
+                return ratios[layer] || 1.0;
+            }
+
+            updateClickableStatus() {
+                // 重置所有卡牌的状态
+                this.cards.forEach(card => {
+                    card.isClickable = false;
+                    card.isBlocked = false;
+                });
+
+                // 从高层到低层检查遮挡关系
+                for (let i = this.cards.length - 1; i >= 0; i--) {
+                    const card = this.cards[i];
+                    if (!card.visible) continue;
+
+                    let isBlocked = false;
+                    
+                    // 检查是否被上层的卡牌遮挡
+                    for (let j = i + 1; j < this.cards.length; j++) {
+                        const upperCard = this.cards[j];
+                        if (!upperCard.visible) continue;
+                        
+                        if (this.isCardBlocked(card, upperCard)) {
+                            isBlocked = true;
+                            break;
+                        }
+                    }
+
+                    // 设置遮挡状态和点击状态
+                    card.isBlocked = isBlocked;
+                    if (!isBlocked) {
+                        card.isClickable = true;
+                    }
+                }
+            }
+
+            isCardBlocked(lowerCard, upperCard) {
+                // 精确的像素级遮挡检测：检查两个卡牌是否有重叠区域
+                const lowerLeft = lowerCard.x;
+                const lowerRight = lowerCard.x + lowerCard.width;
+                const lowerTop = lowerCard.y;
+                const lowerBottom = lowerCard.y + lowerCard.height;
+                
+                const upperLeft = upperCard.x;
+                const upperRight = upperCard.x + upperCard.width;
+                const upperTop = upperCard.y;
+                const upperBottom = upperCard.y + upperCard.height;
+                
+                // 检查是否有重叠
+                const horizontalOverlap = lowerLeft < upperRight && lowerRight > upperLeft;
+                const verticalOverlap = lowerTop < upperBottom && lowerBottom > upperTop;
+                
+                // 如果有任意重叠，则认为被遮挡
+                return horizontalOverlap && verticalOverlap;
+            }
+
+            bindEvents() {
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    this.handleClick(x, y);
+                });
+            }
+
+            handleClick(x, y) {
+                // 从高层到低层查找点击的卡牌
+                for (let i = this.cards.length - 1; i >= 0; i--) {
+                    const card = this.cards[i];
+                    if (card.visible && card.isClickable && card.isPointInside(x, y)) {
+                        this.removeCard(card);
+                        break;
+                    }
+                }
+            }
+
+            removeCard(card) {
+                if (this.slots.length >= this.maxSlots) {
+                    document.getElementById('gameStatus').textContent = '槽位已满！游戏失败！';
+                    this.gameOver();
+                    return;
+                }
+
+                // 从游戏区域移除卡牌
+                card.visible = false;
+                
+                // 添加到槽位
+                this.addToSlot(card);
+                
+                // 更新所有卡牌的可点击状态
+                this.updateClickableStatus();
+                this.updateEmojiCountDisplay();
+                this.draw();
+                
+                // 自动保存游戏进度
+                this.autoSave();
+                
+                // 检查游戏是否结束
+                this.checkGameEnd();
+            }
+
+            addToSlot(card) {
+                // 查找相同emoji的卡牌在槽位中的位置
+                const sameEmojiIndex = this.slots.findIndex(slotCard => slotCard.emoji === card.emoji);
+                
+                if (sameEmojiIndex !== -1) {
+                    // 找到相同emoji的卡牌，插入到其最后一张的尾部
+                    let insertIndex = sameEmojiIndex;
+                    for (let i = sameEmojiIndex; i < this.slots.length; i++) {
+                        if (this.slots[i].emoji === card.emoji) {
+                            insertIndex = i + 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    this.slots.splice(insertIndex, 0, card);
+                } else {
+                    // 没有找到相同emoji的卡牌，添加到末尾
+                    this.slots.push(card);
+                }
+                
+                // 更新槽位显示
+                this.updateSlotDisplay();
+                
+                // 检查是否有3张相同的卡牌
+                this.checkSlotMatch();
+            }
+
+            updateSlotDisplay() {
+                const slotContainer = document.getElementById('slotContainer');
+                const slotElements = slotContainer.children;
+                
+                // 清空所有槽位
+                for (let i = 0; i < slotElements.length; i++) {
+                    const slot = slotElements[i];
+                    slot.textContent = '';
+                    slot.className = 'slot-card';
+                }
+                
+                // 填充槽位
+                this.slots.forEach((card, index) => {
+                    if (index < this.maxSlots) {
+                        const slot = slotElements[index];
+                        slot.textContent = card.emoji;
+                        slot.className = 'slot-card adding';
+                        
+                        // 添加完成动画后移除动画类
+                        setTimeout(() => {
+                            slot.classList.remove('adding');
+                        }, 500);
+                    }
+                });
+                
+                // 如果槽位接近满，添加警告效果
+                if (this.slots.length >= this.maxSlots - 1) {
+                    for (let i = 0; i < slotElements.length; i++) {
+                        if (i >= this.slots.length) {
+                            slotElements[i].classList.add('warning');
+                        }
+                    }
+                }
+            }
+
+            checkSlotMatch() {
+                // 检查是否有3张连续的相同emoji
+                for (let i = 0; i <= this.slots.length - 3; i++) {
+                    if (this.slots[i].emoji === this.slots[i + 1].emoji && 
+                        this.slots[i].emoji === this.slots[i + 2].emoji) {
+                        this.removeSlotMatch(i, i + 1, i + 2);
+                        return;
+                    }
+                }
+            }
+
+            removeSlotMatch(index1, index2, index3) {
+                const emoji = this.slots[index1].emoji;
+                
+                // 添加消除动画
+                const slotContainer = document.getElementById('slotContainer');
+                const slotElements = slotContainer.children;
+                
+                [index1, index2, index3].forEach(index => {
+                    if (slotElements[index]) {
+                        slotElements[index].classList.add('removing');
+                    }
+                });
+                
+                // 等待动画完成后移除卡牌
+                setTimeout(() => {
+                    // 从后往前移除，避免索引变化
+                    this.slots.splice(Math.max(index1, index2, index3), 1);
+                    this.slots.splice(Math.max(index1, index2), 1);
+                    this.slots.splice(Math.min(index1, index2), 1);
+                    
+                    document.getElementById('gameStatus').textContent = `消除了3张 ${emoji}！`;
+                    
+                    // 重新更新槽位显示
+                    this.updateSlotDisplay();
+                    this.updateEmojiCountDisplay();
+                    
+                    // 自动保存游戏进度
+                    this.autoSave();
+                    
+                    // 检查游戏是否结束
+                    this.checkGameEnd();
+                }, 500);
+            }
+
+            gameOver() {
+                // 禁用所有卡牌的点击
+                this.cards.forEach(card => {
+                    card.isClickable = false;
+                });
+                this.draw();
+            }
+
+            checkGameEnd() {
+                const visibleCards = this.cards.filter(card => card.visible);
+                const clickableCards = visibleCards.filter(card => card.isClickable);
+
+                if (visibleCards.length === 0 && this.slots.length === 0) {
+                    if (this.currentLevel < this.maxLevel) {
+                        document.getElementById('gameStatus').textContent = `恭喜通过第${this.currentLevel}关！`;
+                        document.getElementById('nextLevelBtn').style.display = 'inline-block';
+                    } else {
+                        document.getElementById('gameStatus').textContent = '恭喜你！已经通关所有关卡！';
+                    }
+                } else if (clickableCards.length === 0) {
+                    // 检查是否还有可消除的槽位组合
+                    const hasMatch = this.hasSlotMatch();
+                    if (!hasMatch) {
+                        document.getElementById('gameStatus').textContent = `第${this.currentLevel}关失败，再试一次！`;
+                        this.gameOver();
+                    }
+                }
+            }
+
+            hasSlotMatch() {
+                // 检查槽位中是否有可消除的3张相同卡牌
+                for (let i = 0; i <= this.slots.length - 3; i++) {
+                    if (this.slots[i].emoji === this.slots[i + 1].emoji && 
+                        this.slots[i].emoji === this.slots[i + 2].emoji) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // 绘制所有可见卡牌
+                this.cards.forEach(card => {
+                    if (card.visible) {
+                        card.draw(this.ctx);
+                    }
+                });
+            }
+
+            // 重新开始游戏
+            restart() {
+                // 重置到第一关
+                this.currentLevel = 1;
+                document.getElementById('nextLevelBtn').style.display = 'none';
+                
+                // 清空游戏状态
+                this.cards = [];
+                this.slots = [];
+                
+                // 清空槽位显示
+                this.initSlots();
+                
+                // 重新初始化游戏
+                this.init();
+                
+                // 重置游戏状态显示
+                document.getElementById('gameStatus').textContent = '游戏已重新开始！';
+                this.updateEmojiCountDisplay();
+                
+                // 清除保存的游戏进度
+                localStorage.removeItem('ylgy_gameSave');
+            }
+
+            // 保存游戏进度
+            saveGame() {
+                const gameData = {
+                    currentLevel: this.currentLevel,
+                    cards: this.cards.map(card => ({
+                        x: card.x,
+                        y: card.y,
+                        width: card.width,
+                        height: card.height,
+                        layer: card.layer,
+                        emoji: card.emoji,
+                        visible: card.visible,
+                        selected: card.selected,
+                        isClickable: card.isClickable,
+                        isBlocked: card.isBlocked
+                    })),
+                    slots: this.slots.map(card => ({
+                        x: card.x,
+                        y: card.y,
+                        width: card.width,
+                        height: card.height,
+                        layer: card.layer,
+                        emoji: card.emoji,
+                        visible: card.visible,
+                        selected: card.selected,
+                        isClickable: card.isClickable,
+                        isBlocked: card.isBlocked
+                    })),
+                    gameStatus: document.getElementById('gameStatus').textContent
+                };
+                
+                localStorage.setItem('ylgy_gameSave', JSON.stringify(gameData));
+                document.getElementById('gameStatus').textContent = '游戏进度已保存！';
+                
+                // 3秒后恢复原来的游戏状态
+                setTimeout(() => {
+                    document.getElementById('gameStatus').textContent = gameData.gameStatus;
+                }, 3000);
+            }
+
+            // 加载游戏进度
+            loadGame() {
+                const savedData = localStorage.getItem('ylgy_gameSave');
+                if (!savedData) {
+                    return false;
+                }
+                
+                try {
+                    const gameData = JSON.parse(savedData);
+                    
+                    // 恢复关卡
+                    this.currentLevel = gameData.currentLevel || 1;
+                    this.updateLevelDisplay();
+                    
+                    // 清空当前游戏状态
+                    this.cards = [];
+                    this.slots = [];
+                    
+                    // 恢复卡牌数据
+                    gameData.cards.forEach(cardData => {
+                        const card = new Card(cardData.x, cardData.y, cardData.layer, cardData.emoji);
+                        card.visible = cardData.visible;
+                        card.selected = cardData.selected;
+                        card.isClickable = cardData.isClickable;
+                        card.isBlocked = cardData.isBlocked;
+                        this.cards.push(card);
+                    });
+                    
+                    // 恢复槽位数据
+                    gameData.slots.forEach(cardData => {
+                        const card = new Card(cardData.x, cardData.y, cardData.layer, cardData.emoji);
+                        card.visible = cardData.visible;
+                        card.selected = cardData.selected;
+                        card.isClickable = cardData.isClickable;
+                        card.isBlocked = cardData.isBlocked;
+                        this.slots.push(card);
+                    });
+                    
+                    // 更新槽位显示
+                    this.updateSlotDisplay();
+                    
+                    // 恢复游戏状态显示
+                    document.getElementById('gameStatus').textContent = gameData.gameStatus;
+                    
+                    // 重绘游戏
+                    this.draw();
+                    this.updateEmojiCountDisplay();
+                    
+                    return true;
+                } catch (error) {
+                    console.error('加载游戏进度失败:', error);
+                    return false;
+                }
+            }
+
+            // 自动保存游戏进度
+            autoSave() {
+                const gameData = {
+                    currentLevel: this.currentLevel,
+                    cards: this.cards.map(card => ({
+                        x: card.x,
+                        y: card.y,
+                        width: card.width,
+                        height: card.height,
+                        layer: card.layer,
+                        emoji: card.emoji,
+                        visible: card.visible,
+                        selected: card.selected,
+                        isClickable: card.isClickable,
+                        isBlocked: card.isBlocked
+                    })),
+                    slots: this.slots.map(card => ({
+                        x: card.x,
+                        y: card.y,
+                        width: card.width,
+                        height: card.height,
+                        layer: card.layer,
+                        emoji: card.emoji,
+                        visible: card.visible,
+                        selected: card.selected,
+                        isClickable: card.isClickable,
+                        isBlocked: card.isBlocked
+                    })),
+                    gameStatus: document.getElementById('gameStatus').textContent
+                };
+                
+                localStorage.setItem('ylgy_gameSave', JSON.stringify(gameData));
+            }
+
+            // 生成确保可消除的卡牌数组（最简单的版本）
+            generateSolvableCards(totalCards, availableEmojis, levelConfig) {
+                // 使用最简单、最可靠的方法
+                const adjustedTotalCards = Math.floor(totalCards / 3) * 3;
+                const totalGroups = adjustedTotalCards / 3;
+                
+                // 只使用前6种emoji，确保绝对安全
+                const safeEmojis = availableEmojis.slice(0, Math.min(6, availableEmojis.length));
+                
+                const cardEmojis = [];
+                
+                // 平均分配组数到每种emoji
+                const groupsPerEmoji = Math.floor(totalGroups / safeEmojis.length);
+                const remainingGroups = totalGroups % safeEmojis.length;
+                
+                console.log(`生成${totalGroups}组卡牌，使用${safeEmojis.length}种emoji`);
+                console.log(`每种emoji基础组数: ${groupsPerEmoji}`);
+                console.log(`剩余组数: ${remainingGroups}`);
+                
+                // 为每种emoji分配完整的组数
+                safeEmojis.forEach((emoji, index) => {
+                    const groupsForThisEmoji = groupsPerEmoji + (index < remainingGroups ? 1 : 0);
+                    console.log(`${emoji}: ${groupsForThisEmoji}组 (${groupsForThisEmoji * 3}张)`);
+                    
+                    for (let i = 0; i < groupsForThisEmoji; i++) {
+                        // 每组3张相同的emoji
+                        for (let j = 0; j < 3; j++) {
+                            cardEmojis.push(emoji);
+                        }
+                    }
+                });
+                
+                // 根据关卡打乱程度进行打乱
+                const shuffleIterations = Math.floor(cardEmojis.length * levelConfig.shuffleRate);
+                console.log(`打乱次数: ${shuffleIterations}`);
+                
+                for (let iter = 0; iter < shuffleIterations; iter++) {
+                    for (let i = cardEmojis.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [cardEmojis[i], cardEmojis[j]] = [cardEmojis[j], cardEmojis[i]];
+                    }
+                }
+                
+                // 验证：确保所有emoji数量都是3的倍数
+                const validationCounts = {};
+                cardEmojis.forEach(emoji => {
+                    validationCounts[emoji] = (validationCounts[emoji] || 0) + 1;
+                });
+                
+                console.log('生成后的emoji数量:', validationCounts);
+                
+                let isValid = true;
+                Object.values(validationCounts).forEach(count => {
+                    if (count % 3 !== 0) {
+                        isValid = false;
+                        console.error(`严重错误: Emoji数量${count}不是3的倍数`);
+                    }
+                });
+                
+                if (!isValid || cardEmojis.length !== adjustedTotalCards) {
+                    console.error('生成失败，使用紧急备用方案');
+                    return this.generateEmergencyCards(adjustedTotalCards, safeEmojis);
+                }
+                
+                console.log('✅ 成功生成有效的卡牌数组');
+                return cardEmojis;
+            }
+
+            // 生成绝对安全的卡牌数组（备用方案）
+            generateSafeCards(totalCards, availableEmojis) {
+                const cardEmojis = [];
+                const groupsNeeded = Math.floor(totalCards / 3);
+                
+                // 使用循环分配，确保每种emoji都有完整的3倍数组
+                for (let i = 0; i < groupsNeeded; i++) {
+                    const emoji = availableEmojis[i % availableEmojis.length];
+                    for (let j = 0; j < 3; j++) {
+                        cardEmojis.push(emoji);
+                    }
+                }
+                
+                // 打乱数组
+                for (let i = cardEmojis.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [cardEmojis[i], cardEmojis[j]] = [cardEmojis[j], cardEmojis[i]];
+                }
+                
+                return cardEmojis;
+            }
+
+            // 紧急备用方案：最简单的生成方法
+            generateEmergencyCards(totalCards, availableEmojis) {
+                const cardEmojis = [];
+                const groupsNeeded = Math.floor(totalCards / 3);
+                
+                // 只使用前6种emoji，确保绝对安全
+                const safeEmojis = availableEmojis.slice(0, Math.min(6, availableEmojis.length));
+                
+                console.log(`使用紧急备用方案，生成${groupsNeeded}组卡牌`);
+                console.log('使用的emoji:', safeEmojis);
+                
+                // 平均分配组数到每种emoji
+                const groupsPerEmoji = Math.floor(groupsNeeded / safeEmojis.length);
+                const remainingGroups = groupsNeeded % safeEmojis.length;
+                
+                console.log(`每种emoji基础组数: ${groupsPerEmoji}`);
+                console.log(`剩余组数: ${remainingGroups}`);
+                
+                // 为每种emoji分配完整的组数
+                safeEmojis.forEach((emoji, index) => {
+                    const groupsForThisEmoji = groupsPerEmoji + (index < remainingGroups ? 1 : 0);
+                    console.log(`${emoji}: ${groupsForThisEmoji}组 (${groupsForThisEmoji * 3}张)`);
+                    
+                    for (let i = 0; i < groupsForThisEmoji; i++) {
+                        // 每组3张相同的emoji
+                        for (let j = 0; j < 3; j++) {
+                            cardEmojis.push(emoji);
+                        }
+                    }
+                });
+                
+                // 验证生成的数组
+                const validationCounts = {};
+                cardEmojis.forEach(emoji => {
+                    validationCounts[emoji] = (validationCounts[emoji] || 0) + 1;
+                });
+                
+                console.log('紧急备用方案生成的emoji数量:', validationCounts);
+                
+                let isValid = true;
+                Object.values(validationCounts).forEach(count => {
+                    if (count % 3 !== 0) {
+                        isValid = false;
+                        console.error(`紧急备用方案失败: Emoji数量${count}不是3的倍数`);
+                    }
+                });
+                
+                if (isValid) {
+                    console.log('✅ 紧急备用方案成功生成有效卡牌数组');
+                } else {
+                    console.error('❌ 紧急备用方案也失败了！');
+                }
+                
+                return cardEmojis;
+            }
+
+            // 动态修复emoji数量，确保所有都是3的倍数
+            fixEmojiCounts(cardEmojis, availableEmojis) {
+                console.log('=== 开始动态修复emoji数量 ===');
+                
+                // 统计当前每种emoji的数量
+                const emojiCounts = {};
+                cardEmojis.forEach(emoji => {
+                    emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+                });
+                
+                console.log('修复前的emoji数量:', emojiCounts);
+                
+                // 计算需要补充的卡牌
+                const cardsToAdd = [];
+                let totalAdded = 0;
+                
+                Object.entries(emojiCounts).forEach(([emoji, count]) => {
+                    const remainder = count % 3;
+                    if (remainder !== 0) {
+                        const needed = (3 - remainder) % 3; // 需要补充的数量
+                        console.log(`${emoji}: 当前${count}张，余数${remainder}，需要补充${needed}张`);
+                        
+                        for (let i = 0; i < needed; i++) {
+                            cardsToAdd.push(emoji);
+                        }
+                        totalAdded += needed;
+                    }
+                });
+                
+                if (totalAdded === 0) {
+                    console.log('✅ 所有emoji数量都是3的倍数，无需修复');
+                    return cardEmojis;
+                }
+                
+                console.log(`总共需要补充${totalAdded}张卡牌`);
+                
+                // 将补充的卡牌添加到数组中
+                const fixedCardEmojis = [...cardEmojis, ...cardsToAdd];
+                
+                // 验证修复结果
+                const fixedCounts = {};
+                fixedCardEmojis.forEach(emoji => {
+                    fixedCounts[emoji] = (fixedCounts[emoji] || 0) + 1;
+                });
+                
+                console.log('修复后的emoji数量:', fixedCounts);
+                
+                // 检查是否全部修复成功
+                let allValid = true;
+                Object.entries(fixedCounts).forEach(([emoji, count]) => {
+                    if (count % 3 !== 0) {
+                        allValid = false;
+                        console.error(`❌ 修复失败: ${emoji}仍有${count}张，不是3的倍数`);
+                    } else {
+                        console.log(`✅ 修复成功: ${emoji}现在有${count}张`);
+                    }
+                });
+                
+                if (allValid) {
+                    console.log(`✅ 动态修复完成！总共补充了${totalAdded}张卡牌`);
+                } else {
+                    console.error('❌ 动态修复失败！');
+                }
+                
+                return fixedCardEmojis;
+            }
+
+            // 调试检测游戏状态
+            debugGameState() {
+                console.log('=== 游戏状态调试检测 ===');
+                console.log(`当前关卡: ${this.currentLevel}`);
+                console.log(`总卡牌数: ${this.cards.length}`);
+                console.log(`槽位卡牌数: ${this.slots.length}`);
+                
+                // 获取所有卡牌（包括所有生成的卡牌和在槽位中的）
+                const allCards = [...this.cards, ...this.slots];
+                console.log(`剩余卡牌总数: ${allCards.length}`);
+                
+                // 统计每种emoji的数量
+                const emojiCounts = {};
+                allCards.forEach(card => {
+                    emojiCounts[card.emoji] = (emojiCounts[card.emoji] || 0) + 1;
+                });
+                
+                console.log('=== Emoji数量统计 ===');
+                Object.keys(emojiCounts).forEach(emoji => {
+                    const count = emojiCounts[emoji];
+                    const remainder = count % 3;
+                    console.log(`${emoji}: ${count}张 (余数: ${remainder})`);
+                });
+                
+                // 检测是否所有emoji都能3-3配对穷尽
+                const canComplete = this.checkGameCompletable(emojiCounts);
+                console.log('=== 配对检测结果 ===');
+                console.log(`游戏是否可完成: ${canComplete ? '是' : '否'}`);
+                
+                if (!canComplete) {
+                    console.log('⚠️  警告：游戏无法完成！存在无法配对的emoji！');
+                    this.analyzeProblematicEmojis(emojiCounts);
+                } else {
+                    console.log('✅ 游戏可以正常完成，所有emoji都可以3-3配对穷尽');
+                }
+                
+                // 详细分析配对可能性
+                this.analyzePairingPossibilities(emojiCounts);
+                
+                // 显示槽位中的卡牌
+                console.log('=== 槽位状态 ===');
+                this.slots.forEach((card, index) => {
+                    console.log(`槽位${index + 1}: ${card.emoji}`);
+                });
+                
+                // 显示可点击的卡牌数量
+                const clickableCards = this.cards.filter(card => card.visible && card.isClickable);
+                console.log(`可点击卡牌数: ${clickableCards.length}`);
+                
+                console.log('=== 检测完成 ===');
+            }
+
+            // 检查游戏是否可完成
+            checkGameCompletable(emojiCounts) {
+                // 检查每种emoji的数量是否都是3的倍数
+                for (const emoji in emojiCounts) {
+                    const count = emojiCounts[emoji];
+                    if (count % 3 !== 0) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            // 分析有问题的emoji
+            analyzeProblematicEmojis(emojiCounts) {
+                console.log('=== 问题Emoji分析 ===');
+                Object.keys(emojiCounts).forEach(emoji => {
+                    const count = emojiCounts[emoji];
+                    const remainder = count % 3;
+                    if (remainder !== 0) {
+                        console.log(`问题emoji ${emoji}: ${count}张, 余数${remainder}`);
+                        if (remainder === 1) {
+                            console.log(`  -> 需要${3 - remainder}张才能配对，但只有1张，无法配对`);
+                        } else if (remainder === 2) {
+                            console.log(`  -> 需要${3 - remainder}张才能配对，但只有2张，无法配对`);
+                        }
+                    }
+                });
+            }
+
+            // 分析配对可能性
+            analyzePairingPossibilities(emojiCounts) {
+                console.log('=== 配对可能性分析 ===');
+                let totalPairs = 0;
+                let remainingCards = 0;
+                
+                Object.keys(emojiCounts).forEach(emoji => {
+                    const count = emojiCounts[emoji];
+                    const pairs = Math.floor(count / 3);
+                    const remainder = count % 3;
+                    
+                    console.log(`${emoji}: 可组成${pairs}组3张配对，剩余${remainder}张`);
+                    totalPairs += pairs;
+                    remainingCards += remainder;
+                });
+                
+                console.log(`总计可组成${totalPairs}组3张配对`);
+                console.log(`总计剩余${remainingCards}张无法配对`);
+                
+                if (remainingCards === 0) {
+                    console.log('✅ 所有卡牌都可以完美配对');
+                } else {
+                    console.log(`❌ 有${remainingCards}张卡牌无法配对`);
+                }
+            }
+
+            // 更新关卡显示
+            updateLevelDisplay() {
+                const levelConfig = this.levelConfigs[this.currentLevel - 1];
+                document.getElementById('currentLevel').textContent = this.currentLevel;
+                document.getElementById('difficulty').textContent = levelConfig.name;
+            }
+
+            // 更新emoji数量显示
+            updateEmojiCountDisplay() {
+                const emojiCount = document.getElementById('emojiCount');
+                const allCards = [...this.cards.filter(card => card.visible), ...this.slots];
+                
+                const counts = {};
+                allCards.forEach(card => {
+                    counts[card.emoji] = (counts[card.emoji] || 0) + 1;
+                });
+                
+                let html = '';
+                Object.keys(counts).forEach(emoji => {
+                    const count = counts[emoji];
+                    const remainder = count % 3;
+                    let className = 'emoji-count-item';
+                    
+                    if (remainder === 1) {
+                        className += ' danger';
+                    } else if (remainder === 2) {
+                        className += ' warning';
+                    }
+                    
+                    html += `<span class="${className}">${emoji}: ${count}</span>`;
+                });
+                
+                emojiCount.innerHTML = html;
+            }
+
+            // 下一关
+            nextLevel() {
+                if (this.currentLevel >= this.maxLevel) {
+                    document.getElementById('gameStatus').textContent = '恭喜你！已经通关所有关卡！';
+                    return;
+                }
+
+                this.currentLevel++;
+                document.getElementById('nextLevelBtn').style.display = 'none';
+                
+                // 清空游戏状态
+                this.cards = [];
+                this.slots = [];
+                
+                // 清空槽位显示
+                this.initSlots();
+                
+                // 重新初始化游戏
+                this.init();
+                
+                document.getElementById('gameStatus').textContent = `第${this.currentLevel}关开始！`;
+                this.updateEmojiCountDisplay();
+            }
+        }
+
+        // 启动游戏
+        window.addEventListener('load', () => {
+            const canvas = document.getElementById('gameCanvas');
+            window.game = new Game(canvas);
+            
+            // 尝试加载保存的游戏进度
+            if (!window.game.loadGame()) {
+                // 如果没有保存的进度，显示新游戏提示
+                document.getElementById('gameStatus').textContent = '点击卡牌开始游戏';
+            }
+        });
+    </script>
+</body>
+</html>
